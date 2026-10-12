@@ -2935,6 +2935,7 @@ function update(dt){
   var ml=Math.hypot(fx,fz);if(ml>1){fx/=ml;fz/=ml;ml=1;}
   if(dead||idle){fx=0;fz=0;ml=0;}
   var sprint=(keys.ShiftLeft||keys.ShiftRight||input.sprintT)&&fz>0.2&&!input.aim;
+  player.sprinting=sprint&&!dead;
   var spd=(sprint?6.4:4.2)*(game.buffs.speed>0?1.35:1)*(1-0.3*(player.adsK||0));
   var cy=Math.cos(player.yaw),sy=Math.sin(player.yaw);
   player.slideCd-=dt;
@@ -3110,13 +3111,14 @@ function animate(dt){
   }
   var ab2=$('bAim');if(ab2&&ab2.classList.contains('on')!==!!input.aim)ab2.classList.toggle('on',!!input.aim);
   var ik=player.inspK||0;
-  if(player.insp)ik=Math.min(1,ik+dt*7);else ik=Math.max(0,ik-dt*9);
+  if(player.insp)ik=Math.min(1,ik+dt*4);else ik=Math.max(0,ik-dt*6);
   player.inspK=ik;
   var pl=gunState.len||0.5;
   if(ik>0){
-    inspPivot.position.set(inspPose[0]*ik,inspPose[1]*ik,-pl/2+inspPose[2]*ik);
-    inspPivot.rotation.set(wrapAng(inspPose[3])*ik,wrapAng(inspPose[4])*ik,wrapAng(inspPose[5])*ik);
-    inspPivot.scale.setScalar(1+inspPose[6]*ik);
+    var ie=ik*ik*(3-2*ik);
+    inspPivot.position.set(inspPose[0]*ie,inspPose[1]*ie,-pl/2+inspPose[2]*ie);
+    inspPivot.rotation.set(wrapAng(inspPose[3])*ie,wrapAng(inspPose[4])*ie,wrapAng(inspPose[5])*ie);
+    inspPivot.scale.setScalar(1+inspPose[6]*ie);
   }else{inspPivot.position.set(0,0,-pl/2);inspPivot.rotation.set(0,0,0);inspPivot.scale.setScalar(1);}
   var mk=player.meleeT>0&&game.started&&!game.over;
   gunRoot.visible=!mk;knife.visible=mk;
@@ -3135,11 +3137,27 @@ function animate(dt){
 /* Cada arma tem: estilo base (movimento principal), duração, amplitude, lado (espelho) e um floreio próprio. */
 var TAU=Math.PI*2;
 function ss01(x){x=x<0?0:(x>1?1:x);return x*x*(3-2*x);}
-function evalKF(F,t,o){
-  var n=F.length-1,i=0;
-  while(i<n-1&&t>F[i+1][0])i++;
-  var a=F[i],b=F[i+1],u=ss01((t-a[0])/(b[0]-a[0]));
-  for(var k=0;k<6;k++)o[k]=a[k+1]+(b[k+1]-a[k+1])*u;
+/* curva cíclica e contínua (Hermite com tangentes): o movimento nunca "trava" em cada pose e o fim emenda no começo */
+function kfTangents(F){
+  var m=F.length-1,T=[],i,k;
+  for(i=0;i<m;i++){
+    var ip=(i-1+m)%m,inx=(i+1)%m;
+    var tp=F[ip][0]-(i===0?1:0),tn=F[inx][0]+(i===m-1?1:0),dt=tn-tp,mm=[];
+    for(k=1;k<=6;k++)mm.push((F[inx][k]-F[ip][k])/dt);
+    T.push(mm);
+  }
+  T[0]=[0,0,0,0,0,0]; /* cada ato parte e termina suavemente da pose neutra, então a emenda entre atos e o recomeço não dão tranco */
+  return T;
+}
+function evalKF(F,t,o,S){
+  var m=F.length-1,i=0,k;
+  if(!S.tan)S.tan=kfTangents(F);
+  while(i<m-1&&t>=F[i+1][0])i++;
+  var a=F[i],b=F[i+1],j=(i+1)%m,dt=b[0]-a[0],u=(t-a[0])/dt;
+  var u2=u*u,u3=u2*u;
+  var h00=2*u3-3*u2+1,h10=u3-2*u2+u,h01=-2*u3+3*u2,h11=u3-u2;
+  var m0=S.tan[i],m1=S.tan[j];
+  for(k=0;k<6;k++)o[k]=h00*a[k+1]+h10*dt*m0[k]+h01*F[j][k+1]+h11*dt*m1[k];
 }
 /* quadros: [tempo 0..1, x, y, z, giroX, giroY, giroZ] */
 var INSP_STYLES={
@@ -3173,33 +3191,46 @@ var INSP_STYLES={
     proc:function(t,o){var b=Math.min(1,Math.max(0,(t-.15)/.7));o[1]+=Math.abs(Math.sin(Math.PI*5*b))*.05;o[5]+=TAU*ss01((t-.35)/.3);},
     cue:[[.15,'whoosh'],[.35,'whoosh'],[.7,'click']]}
 };
-/* arma -> [estilo, duração (s), amplitude, espelho (1 ou -1), floreio] */
+/* Cada arma faz uma coreografia em dois atos que se emendam: [ato 1, ato 2, duração (s), amplitude, espelho, floreio do ato 1, floreio do ato 2] */
 var INSP_W={
-  p9:['pistol',2.6,1,1,'none'],m19:['pistol',2.8,1,-1,'roll'],pregos:['revolver',2.9,1,-1,'hop'],carrasco:['revolver',3.2,1,1,'none'],
-  vespa:['smg',2.4,1,1,'none'],mp4:['smg',2.6,1,-1,'jitter'],tommy:['smg',3.0,1,1,'sway'],
-  gc12:['shotgun',2.8,1,1,'none'],tubo:['shotgun',3.0,1,-1,'pump'],paralisa:['shotgun',3.0,1,1,'pulse'],soprador:['rev',3.0,1,-1,'sway'],
-  ceifa:['rifle',3.0,1,1,'none'],k47:['rifle',2.9,1,-1,'nod'],s44:['rifle',3.1,1,1,'roll'],an9:['rifle',2.8,1,-1,'jitter'],g11:['rifle',3.2,1,1,'pulse'],
-  rpd:['lmg',3.4,1,1,'none'],latas:['lmg',3.4,1,-1,'sway'],papelao:['toy',2.6,1,1,'nod'],
-  lanca:['sniper',3.4,1,1,'none'],ds50:['sniper',3.2,1,-1,'nod'],
-  besta:['bow',3.0,1,-1,'pump'],arco:['bow',3.0,1,1,'none'],
-  serra:['rev',3.0,1.1,1,'jitter'],chama:['rev',3.0,1,-1,'pulse'],
-  raiox:['energy',3.2,1,1,'none'],tesla:['energy',3.0,1,-1,'jitter'],tempestade:['energy',3.4,1.1,1,'pulse'],uivo:['energy',3.2,.9,-1,'sway'],
-  gemeo:['energy',3.0,1,1,'roll'],caos:['energy',3.4,1,-1,'flip'],emissor:['energy',2.8,.9,1,'nod'],tentaculo:['energy',3.4,1,1,'sway'],aberracao:['energy',3.6,1.1,-1,'jitter'],
-  balista:['heavy',3.2,1,1,'pump'],cimento:['heavy',3.6,1.1,-1,'hop'],urso:['heavy',3.2,1,1,'sway'],bombach:['heavy',3.4,1,-1,'pulse'],galinha:['heavy',3.6,1.1,1,'hop'],fogos:['heavy',3.0,1,-1,'nod'],
-  frasco:['toy',2.8,1,1,'roll'],tomate:['toy',2.6,1,-1,'hop'],chicle:['toy',2.8,1,1,'pulse'],pipoca:['toy',2.8,1,-1,'sway'],esguicho:['toy',2.6,1,1,'jitter'],tinta:['toy',2.8,1,-1,'roll']
+  p9:['pistol','revolver',7.0,1,1,'look','toss'],m19:['pistol','smg',6.8,1,-1,'roll','tap'],pregos:['revolver','pistol',7.2,1,-1,'hop','shake'],carrasco:['revolver','pistol',7.5,1,1,'turn','double'],
+  vespa:['smg','pistol',6.6,1,1,'tap','roll'],mp4:['smg','rifle',7.0,1,-1,'jitter','look'],tommy:['smg','lmg',7.2,1,1,'sway','eight'],
+  gc12:['shotgun','rifle',7.0,1,1,'pump','turn'],tubo:['shotgun','heavy',7.4,1,-1,'tap','pump'],paralisa:['shotgun','energy',7.4,1,1,'pulse','wave'],soprador:['rev','toy',7.0,1,-1,'sway','hop'],
+  ceifa:['rifle','smg',7.4,1,1,'look','nod'],k47:['rifle','sniper',7.2,1,-1,'nod','roll'],s44:['rifle','shotgun',7.6,1,1,'roll','pump'],an9:['rifle','pistol',7.0,1,-1,'jitter','tap'],g11:['rifle','lmg',7.6,1,1,'pulse','eight'],
+  rpd:['lmg','rifle',8.0,1,1,'look','shake'],latas:['lmg','toy',7.6,1,-1,'sway','toss'],papelao:['toy','rifle',6.8,1,1,'nod','wave'],
+  lanca:['sniper','heavy',8.0,1,1,'look','pump'],ds50:['sniper','rifle',7.8,1,-1,'nod','tap'],
+  besta:['bow','sniper',7.6,1,-1,'pump','look'],arco:['bow','energy',7.6,1,1,'shake','turn'],
+  serra:['rev','heavy',7.2,1.1,1,'jitter','shake'],chama:['rev','energy',7.4,1,-1,'pulse','eight'],
+  raiox:['energy','heavy',7.8,1,1,'look','pulse'],tesla:['energy','rev',7.4,1,-1,'jitter','shake'],tempestade:['energy','heavy',8.0,1.1,1,'pulse','toss'],uivo:['energy','bow',7.6,.9,-1,'sway','turn'],
+  gemeo:['energy','pistol',7.4,1,1,'roll','double'],caos:['energy','toy',7.8,1,-1,'flip','wave'],emissor:['energy','sniper',7.0,.9,1,'nod','look'],tentaculo:['energy','rev',7.8,1,1,'sway','eight'],aberracao:['energy','heavy',8.2,1.1,-1,'jitter','shake'],
+  balista:['heavy','sniper',7.8,1,1,'pump','look'],cimento:['heavy','lmg',8.2,1.1,-1,'hop','tap'],urso:['heavy','toy',7.6,1,1,'sway','toss'],bombach:['heavy','energy',7.8,1,-1,'pulse','wave'],galinha:['heavy','toy',8.2,1.1,1,'hop','double'],fogos:['heavy','shotgun',7.4,1,-1,'nod','pump'],
+  frasco:['toy','heavy',7.2,1,1,'roll','toss'],tomate:['toy','revolver',7.0,1,-1,'hop','turn'],chicle:['toy','energy',7.2,1,1,'pulse','eight'],pipoca:['toy','shotgun',7.2,1,-1,'sway','tap'],esguicho:['toy','smg',6.8,1,1,'jitter','roll'],tinta:['toy','rifle',7.2,1,-1,'roll','look']
 };
+var INSP_ACT=0.55,INSP_X0=0.45; /* o ato 1 ocupa 0..55% e o ato 2 ocupa 45..100%; entre 45% e 55% os dois se misturam */
 function inspCfg(id){
-  var c=INSP_W[id]||['rifle',3,1,1,'none'];
-  return {style:c[0],dur:c[1],amp:c[2],mir:c[3],fl:c[4]};
+  var c=INSP_W[id]||['rifle','pistol',7,1,1,'none','none'];
+  var S1=INSP_STYLES[c[0]],S2=INSP_STYLES[c[1]],cues=[],i;
+  for(i=0;i<(S1.cue||[]).length;i++)cues.push([S1.cue[i][0]*INSP_ACT,S1.cue[i][1]]);
+  for(i=0;i<(S2.cue||[]).length;i++)cues.push([INSP_X0+S2.cue[i][0]*INSP_ACT,S2.cue[i][1]]);
+  cues.sort(function(a,b){return a[0]-b[0];});
+  return {s1:c[0],s2:c[1],dur:c[2],amp:c[3],mir:c[4],f1:c[5],f2:c[6],cues:cues};
 }
-/* floreio próprio da arma, entre 50% e 80% da animação; termina sempre na pose neutra */
+/* floreio próprio, entre 45% e 85% do ato; sempre começa e termina na pose neutra */
 function inspFlourish(kind,t,o){
-  var u=t<.5?0:(t>.8?1:(t-.5)/.3);
+  var u=t<.45?0:(t>.85?1:(t-.45)/.4);
   if(kind==='none'||kind===undefined)return;
   var b=Math.sin(Math.PI*u),p=ss01(u);
   if(kind==='roll')o[5]+=TAU*p;
+  else if(kind==='double')o[5]+=2*TAU*p;
   else if(kind==='flip')o[3]-=TAU*p;
   else if(kind==='spinY')o[4]+=TAU*p;
+  else if(kind==='toss'){o[1]+=Math.sin(Math.PI*p)*.1;o[3]-=TAU*p;}
+  else if(kind==='eight'){o[0]+=Math.sin(u*TAU)*.04;o[1]+=Math.sin(u*TAU*2)*.025;o[5]+=Math.sin(u*TAU)*.2;}
+  else if(kind==='shake'){o[0]+=Math.sin(u*60)*.018*b;o[5]+=Math.sin(u*47)*.12*b;}
+  else if(kind==='tap')o[3]-=Math.abs(Math.sin(u*Math.PI*3))*.2;
+  else if(kind==='look'){o[3]+=.35*b;o[2]+=.08*b;o[1]+=.03*b;o[4]+=.3*b;}
+  else if(kind==='turn')o[4]+=Math.sin(u*TAU)*.8;
+  else if(kind==='wave'){o[5]+=Math.sin(u*TAU*3)*.25*b;o[1]+=Math.sin(u*TAU*3)*.02*b;}
   else if(kind==='jitter'){o[0]+=Math.sin(t*170)*.012*b;o[1]+=Math.cos(t*150)*.01*b;}
   else if(kind==='nod')o[3]+=Math.sin(u*TAU*2)*.22;
   else if(kind==='hop')o[1]+=Math.abs(Math.sin(u*Math.PI*2))*.06;
@@ -3207,15 +3238,28 @@ function inspFlourish(kind,t,o){
   else if(kind==='pump')o[2]+=Math.max(0,Math.sin(u*Math.PI*4))*.09;
   else if(kind==='pulse')o[6]+=Math.sin(u*Math.PI)*.1;
 }
-function inspPoseAt(c,t,o){
-  var S=INSP_STYLES[c.style],i;
-  t=t<0?0:(t>1?1:t);
-  evalKF(S.F,t,o);
-  for(i=0;i<6;i++)o[i]*=c.amp;
+function wrapR(a){return a-TAU*Math.round(a/TAU);}
+/* um ato: estilo + floreio + espelho; as rotações saem entre -π e π para poder misturar com o outro ato */
+function inspAct(style,fl,mir,amp,p,o){
+  var S=INSP_STYLES[style],i;
+  p=p<0?0:(p>1?1:p);
+  evalKF(S.F,p,o,S);
+  for(i=0;i<6;i++)o[i]*=amp;
   o[6]=0;
-  if(S.proc)S.proc(t,o);
-  inspFlourish(c.fl,t,o);
-  if(c.mir<0){o[0]=-o[0];o[4]=-o[4];o[5]=-o[5];}
+  if(S.proc)S.proc(p,o);
+  inspFlourish(fl,p,o);
+  if(mir<0){o[0]=-o[0];o[4]=-o[4];o[5]=-o[5];}
+  o[3]=wrapR(o[3]);o[4]=wrapR(o[4]);o[5]=wrapR(o[5]);
+}
+var inspA=[0,0,0,0,0,0,0],inspB=[0,0,0,0,0,0,0];
+function inspPoseAt(c,t,o){
+  t=t<0?0:(t>1?1:t);
+  var w=ss01((t-INSP_X0)/(INSP_ACT-INSP_X0)),k;
+  inspAct(c.s1,c.f1,c.mir,c.amp,t/INSP_ACT,inspA);
+  if(w>0){
+    inspAct(c.s2,c.f2,-c.mir,c.amp,(t-INSP_X0)/INSP_ACT,inspB);
+    for(k=0;k<7;k++)o[k]=inspA[k]*(1-w)+inspB[k]*w;
+  }else for(k=0;k<7;k++)o[k]=inspA[k];
   return o;
 }
 
@@ -3224,19 +3268,28 @@ function startInspect(){
   if(!game.playing||game.paused||game.over||player.down)return;
   if(player.insp){player.insp=null;return;}
   var w=player.weapons[player.cur];
-  if(!w||w.reloadT>0||player.meleeT>0||player.switchT>0||input.fire||player.slideT>0||input.aim)return;
+  if(!w||w.reloadT>0||player.meleeT>0||player.switchT>0||input.fire||player.slideT>0||input.aim||player.sprinting)return;
   var c=inspCfg(w.id);
-  player.insp={t:0,dur:c.dur,c:c};
+  player.insp={t:0,dur:c.dur,c:c,clk:0};
   inspPoseAt(c,0,inspPose);
 }
 function inspectTick(dt,w,dead){
   var I=player.insp;if(!I)return;
-  if(dead||!w||game.over||player.down||input.fire||input.knife||w.reloadT>0||player.meleeT>0||player.switchT>0||player.slideT>0){player.insp=null;return;}
-  var t0=I.t/I.dur;I.t+=dt;var t1=I.t/I.dur;
-  var cues=INSP_STYLES[I.c.style].cue||[];
-  for(var i=0;i<cues.length;i++)if(cues[i][0]>t0&&cues[i][0]<=t1)sfx.insp(cues[i][1]);
+  /* andar não interrompe; atirar, recarregar, facada, trocar, mirar, correr, pular e deslizar interrompem */
+  if(dead||!w||game.over||player.down||input.fire||input.knife||input.aim||player.sprinting||player.y>0.05||w.reloadT>0||player.meleeT>0||player.switchT>0||player.slideT>0){player.insp=null;return;}
+  var t0=I.t/I.dur;I.t+=dt;I.clk+=dt;var t1=I.t/I.dur,cues=I.c.cues,i;
+  for(i=0;i<cues.length;i++)if(cues[i][0]>t0&&cues[i][0]<=Math.min(1,t1))sfx.insp(cues[i][1]);
+  if(t1>=1){
+    /* recomeça do início, sem parar, enquanto o jogador não fizer nenhuma ação */
+    I.t-=I.dur;t1=I.t/I.dur;
+    for(i=0;i<cues.length;i++)if(cues[i][0]<=t1)sfx.insp(cues[i][1]);
+  }
   inspPoseAt(I.c,t1,inspPose);
-  if(I.t>=I.dur)player.insp=null;
+  /* respiração e pequenas oscilações da mão, para a arma parecer viva */
+  inspPose[0]+=Math.sin(I.clk*1.1)*.003;
+  inspPose[1]+=Math.sin(I.clk*1.7)*.004;
+  inspPose[3]+=Math.sin(I.clk*2.1)*.01;
+  inspPose[5]+=Math.sin(I.clk*1.3)*.015;
 }
 
 var orientC=0;

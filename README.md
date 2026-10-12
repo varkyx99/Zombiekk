@@ -25,5 +25,12 @@ Observações:
 
 ## Controles
 
-Computador: WASD mover, Shift correr, Espaço pular, C deslizar, clique atirar, R recarregar, V facada, G mascar chiclete, E comprar ou abrir, Q ou roda do mouse trocar de arma, Esc pausar.
-Celular: joystick à esquerda, arraste à direita para olhar e use os botões. Em Configurações dá para mudar a sensibilidade e mover os botões.
+Computador: WASD mover, Shift correr, Espaço pular, C deslizar, clique atirar, R recarregar, V facada, T inspecionar a arma (dá para andar enquanto inspeciona; a animação repete até você atirar, recarregar, dar facada, trocar, mirar, correr ou pular), botão direito ou X mirar, G mascar chiclete, E comprar ou abrir, Q ou roda do mouse trocar de arma, Esc pausar.
+Celular: joystick à esquerda, arraste à direita para olhar e use os botões (INSP inspeciona a arma, MIRA liga e desliga a mira). Em Configurações dá para mudar a sensibilidade e mover os botões.
+
+## Se o cooperativo não conectar
+
+- Todos precisam abrir o link `https://SEU-USUARIO.github.io/ultima-onda/` (https), e o anfitrião deve **criar a sala primeiro** e deixar a aba aberta.
+- Digite o código exatamente como aparece (maiúsculas/minúsculas não importam).
+- Se aparecer "Demorou demais" ou "servidor de conexão", troque de rede (Wi-Fi ↔ 4G) e tente de novo.
+- Importante: o `.nojekyll` começa com ponto e pode não aparecer na hora de enviar; o jogo funciona sem ele.
