@@ -34,3 +34,7 @@ Celular: joystick à esquerda, arraste à direita para olhar e use os botões (I
 - Digite o código exatamente como aparece (maiúsculas/minúsculas não importam).
 - Se aparecer "Demorou demais" ou "servidor de conexão", troque de rede (Wi-Fi ↔ 4G) e tente de novo.
 - Importante: o `.nojekyll` começa com ponto e pode não aparecer na hora de enviar; o jogo funciona sem ele.
+
+## Skins de arma
+
+No menu (ou pausado), toque em **Skins**. Escolha uma arma (ou "Todas as armas"), use um modelo pronto ou crie o seu: cor do **corpo**, do **cabo** e dos **detalhes**, mais um padrão (lisa, camuflagem, listras, xadrez ou pontos). A prévia mostra o resultado e tudo fica salvo neste aparelho. **Usar em todas as armas** aplica a skin atual a todas, e **Remover skin** volta ao visual original.

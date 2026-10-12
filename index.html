@@ -191,6 +191,13 @@ input,select{-webkit-user-select:text;user-select:text}
 }
 
 .tabs{display:flex;gap:8px;flex-wrap:wrap}
+#skin{background:linear-gradient(90deg,rgba(4,8,8,.99),rgba(4,8,8,.94))}
+#skPrev{width:min(420px,100%);height:auto;border:2px solid var(--line);image-rendering:pixelated}
+.cols{display:flex;gap:14px;flex-wrap:wrap}
+.cols .f{flex:1 1 96px}
+.f input[type=color]{width:100%;height:46px;padding:2px;border:2px solid var(--line);background:rgba(10,18,16,.9)}
+#skPresets{display:flex;flex-wrap:wrap;gap:8px;max-width:460px}
+#skPresets button{font-size:15px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--fg);background:rgba(10,18,16,.9);border:2px solid var(--line);border-left-width:12px;padding:6px 10px}
 .tab{font-size:18px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);background:transparent;border:0;border-bottom:3px solid var(--line);padding:8px 14px}
 .tab.on{color:var(--sodium);border-color:var(--sodium)}
 .pane{display:flex;flex-direction:column;gap:14px;max-width:460px}
@@ -270,6 +277,7 @@ input,select{-webkit-user-select:text;user-select:text}
       </div>
       <div class="row">
         <button id="mpBtn" class="ghost" type="button">Cooperativo online</button>
+        <button id="skinBtn" class="ghost" type="button">Skins</button>
         <button id="quit" class="ghost" type="button" hidden>Sair para o menu</button>
       </div>
       <div class="keys" id="keys">
@@ -351,6 +359,26 @@ input,select{-webkit-user-select:text;user-select:text}
       <p class="meta" id="mpStatus"></p>
       <ul id="mpList" class="plist"></ul>
       <div class="row"><button id="mpStart" class="cta" type="button" hidden>Iniciar partida</button><button id="mpLeave" class="ghost" type="button" hidden>Sair da sala</button><button id="mpBack" class="ghost" type="button">Voltar</button></div>
+    </div>
+  </div>
+
+  <div id="skin" class="screen" hidden>
+    <div class="screen-in">
+      <p class="eyebrow">Personalização</p>
+      <h1 class="h2">Skins de arma</h1>
+      <p class="meta">Crie a cor da sua arma. Tudo é salvo neste aparelho e só você vê.</p>
+      <label class="f"><span>Arma</span><select id="skW"></select></label>
+      <canvas id="skPrev" width="420" height="170"></canvas>
+      <p class="meta" id="skNote"></p>
+      <div id="skPresets"></div>
+      <div class="cols">
+        <label class="f"><span>Corpo</span><input id="skP" type="color" value="#3a3f46"></label>
+        <label class="f"><span>Cabo</span><input id="skS" type="color" value="#5a3c22"></label>
+        <label class="f"><span>Detalhes</span><input id="skA" type="color" value="#f2b84b"></label>
+      </div>
+      <label class="f"><span>Padrão</span><select id="skPat"></select></label>
+      <div class="row"><button id="skAll" class="ghost" type="button">Usar em todas as armas</button><button id="skReset" class="ghost" type="button">Remover skin</button></div>
+      <div class="row"><button id="skBack" class="cta" type="button">Voltar</button></div>
     </div>
   </div>
 
@@ -851,6 +879,113 @@ var knife=new THREE.Group();knife.visible=false;gunScene.add(knife);
   kp(0.07,0.08,0.1,SKIN,0,0,0.06);
 })();
 var flashMat=new THREE.MeshBasicMaterial({color:0xffcc66,transparent:true,opacity:0.95,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide});
+/* ===================== Skins de arma ===================== */
+var SKIN_PRESETS=[
+  {n:'Ouro',p:'#d4af37',s:'#8a6a1c',a:'#fff1a8',pat:'liso'},
+  {n:'Preto fosco',p:'#16181b',s:'#26292d',a:'#6b7076',pat:'liso'},
+  {n:'Floresta',p:'#3f5a2a',s:'#6b5a3a',a:'#1f301a',pat:'camo'},
+  {n:'Deserto',p:'#b89a64',s:'#8a6f43',a:'#5c4a2a',pat:'camo'},
+  {n:'Neon',p:'#101418',s:'#1d242b',a:'#39ff14',pat:'listras'},
+  {n:'Chiclete',p:'#ff6aa8',s:'#ffd0e4',a:'#c2347a',pat:'pontos'},
+  {n:'Gelo',p:'#7fd6ff',s:'#e8f8ff',a:'#2a6f9a',pat:'camo'},
+  {n:'Sangue',p:'#1a0d0d',s:'#5a0f0f',a:'#d1301f',pat:'listras'},
+  {n:'Xadrez',p:'#e8e8e8',s:'#222222',a:'#d1301f',pat:'xadrez'}
+];
+var SKIN_PATS=[['liso','Lisa'],['camo','Camuflagem'],['listras','Listras'],['xadrez','Xadrez'],['pontos','Pontos']];
+function skinFor(id){var K=cfg.skins;return (K&&(K[id]||K.all))||null;}
+function skinHex(h){var n=parseInt(String(h).replace('#',''),16);return isNaN(n)?0:n&0xffffff;}
+function skinCss(c){return '#'+('000000'+c.toString(16)).slice(-6);}
+function skinShade(c,f){
+  var r=Math.min(255,Math.round(((c>>16)&255)*f)),g=Math.min(255,Math.round(((c>>8)&255)*f)),b=Math.min(255,Math.round((c&255)*f));
+  return (r<<16)|(g<<8)|b;
+}
+function skinLum(c){var r=(c>>16)&255,g=(c>>8)&255,b=c&255;return (Math.max(r,g,b)+Math.min(r,g,b))/510;}
+/* cada peça da arma tem um papel: p = corpo (metal), s = cabo/madeira, a = detalhes (cores vivas e partes brilhantes) */
+function skinRole(c,basic){
+  if(c===SKIN)return null;
+  if(basic)return 'a';
+  var r=(c>>16)&255,g=(c>>8)&255,b=c&255,mx=Math.max(r,g,b),mn=Math.min(r,g,b),sat=mx?(mx-mn)/mx:0,L=(mx+mn)/510;
+  if(sat>0.55&&L>0.3)return 'a';
+  if(sat>0.25&&r>b+18)return 's';
+  return 'p';
+}
+function skinPartInfo(p,sk){
+  var role=skinRole(p[6],!!p[7]);if(!role)return null;
+  var mean=role==='a'?0.5:(role==='s'?0.22:0.15);
+  var f=Math.sqrt(Math.min(1.6,Math.max(0.5,skinLum(p[6])/mean)));
+  return {role:role,f:f,base:skinHex(sk[role]),patterned:!!sk.pat&&sk.pat!=='liso'&&role!=='a'&&!p[7]};
+}
+function skinRand(seed){var v=(seed>>>0)||1;return function(){v=(Math.imul(v,1664525)+1013904223)>>>0;return v/4294967296;};}
+function skinPatDraw(x,w,h,pat,c1,c2,c3){
+  x.fillStyle=c1;x.fillRect(0,0,w,h);
+  var R=skinRand(w*131+h*17+c1.length*7+c2.charCodeAt(1)*3),i,k;
+  if(pat==='camo'){
+    for(i=0;i<18;i++){
+      x.fillStyle=(i%3)?c2:c3;
+      var bx=R()*w,by=R()*h,bw=w*(0.14+R()*0.22),bh=h*(0.1+R()*0.18);
+      for(k=-1;k<=1;k++){x.fillRect(bx+k*w,by,bw,bh);x.fillRect(bx,by+k*h,bw,bh);}
+    }
+  }else if(pat==='listras'){
+    for(k=0;k<w;k+=16){x.fillStyle=c2;x.fillRect(k,0,8,h);x.fillStyle=c3;x.fillRect(k+8,0,2,h);}
+  }else if(pat==='xadrez'){
+    for(i=0;i<w;i+=16)for(k=0;k<h;k+=16){if(((i+k)/16)%2===0){x.fillStyle=c2;x.fillRect(i,k,16,16);}}
+    x.fillStyle=c3;x.fillRect(0,0,w,2);x.fillRect(0,0,2,h);
+  }else if(pat==='pontos'){
+    for(i=0;i<w;i+=16)for(k=0;k<h;k+=16){x.fillStyle=c2;x.fillRect(i+4,k+4,8,8);x.fillStyle=c3;x.fillRect(i+7,k+7,2,2);}
+  }
+}
+var skinMats={};
+function skinColors(sk,role){return role==='p'?[sk.p,sk.s,sk.a]:[sk.s,sk.p,sk.a];}
+function partMat(p,sk){
+  if(!sk)return p[7]?MB(p[6]):M(p[6]);
+  var info=skinPartInfo(p,sk);
+  if(!info)return M(p[6]);
+  if(p[7])return MB(info.base);
+  if(!info.patterned)return M(skinShade(info.base,info.f));
+  var key=sk.pat+'|'+info.role+'|'+sk.p+sk.s+sk.a+'|'+Math.round(info.f*20);
+  if(skinMats[key])return skinMats[key];
+  var cs=skinColors(sk,info.role);
+  var tex=makeTex(function(x,w,h){skinPatDraw(x,w,h,sk.pat,cs[0],cs[1],cs[2]);},64,64);
+  var m=new THREE.MeshLambertMaterial({color:skinShade(0xffffff,Math.min(1,info.f*0.85)),map:tex});
+  skinMats[key]=m;return m;
+}
+/* desenho 2D lateral da arma, usado na tela de skins (mostra o mesmo resultado do 3D) */
+var skinPatCache={};
+function skinDrawPreview(cv,id,sk){
+  var d=WEAPONS[id];if(!d||!d.parts)return;
+  var x=cv.getContext('2d'),W=cv.width,H=cv.height;
+  x.clearRect(0,0,W,H);x.fillStyle='#0a1210';x.fillRect(0,0,W,H);
+  var rs=[],minX=1e9,maxX=-1e9,minY=1e9,maxY=-1e9;
+  d.parts.forEach(function(p){
+    var sh=p[8]||'b',w,h;
+    if(sh==='c'){w=p[2];h=p[0];}else if(sh==='v'){w=p[0];h=p[1];}else if(sh==='x'){w=p[1];h=p[1];}else{w=p[2];h=p[1];}
+    var cx=-p[5],cy=-p[4];
+    rs.push({p:p,sh:sh,cx:cx,cy:cy,w:w,h:h});
+    minX=Math.min(minX,cx-w/2);maxX=Math.max(maxX,cx+w/2);minY=Math.min(minY,cy-h/2);maxY=Math.max(maxY,cy+h/2);
+  });
+  var pad=18,sc=Math.min((W-pad*2)/Math.max(0.1,maxX-minX),(H-pad*2)/Math.max(0.1,maxY-minY));
+  var ox=W/2-(minX+maxX)/2*sc,oy=H/2-(minY+maxY)/2*sc;
+  rs.sort(function(a,b){return a.p[3]-b.p[3];});
+  x.imageSmoothingEnabled=false;
+  rs.forEach(function(r){
+    var p=r.p,info=sk?skinPartInfo(p,sk):null,px=ox+(r.cx-r.w/2)*sc,py=oy+(r.cy-r.h/2)*sc,pw=r.w*sc,ph=r.h*sc,shade=0;
+    if(!sk||!info)x.fillStyle=skinCss(p[6]);
+    else if(p[7])x.fillStyle=skinCss(info.base);
+    else if(!info.patterned)x.fillStyle=skinCss(skinShade(info.base,info.f));
+    else{
+      var cs=skinColors(sk,info.role),key=sk.pat+'|'+cs.join('');
+      var pc=skinPatCache[key];
+      if(!pc){var c2=document.createElement('canvas');c2.width=c2.height=64;skinPatDraw(c2.getContext('2d'),64,64,sk.pat,cs[0],cs[1],cs[2]);pc=skinPatCache[key]=x.createPattern(c2,'repeat');}
+      x.fillStyle=pc;shade=1-Math.min(1,info.f*0.85);
+    }
+    x.beginPath();
+    if(r.sh==='s'||r.sh==='x')x.ellipse(px+pw/2,py+ph/2,pw/2,ph/2,0,0,Math.PI*2);else x.rect(px,py,pw,ph);
+    x.fill();
+    if(shade>0){x.fillStyle='rgba(0,0,0,'+shade.toFixed(2)+')';x.fill();}
+    x.strokeStyle='rgba(0,0,0,.55)';x.lineWidth=1;x.stroke();
+  });
+}
+
 /* mira de ferro: massa de mira na frente e alça atrás; devolve a altura (y) da linha de mira */
 var NO_SIGHT={arco:1,serra:1,soprador:1};
 function partTop(p){
@@ -898,7 +1033,7 @@ function buildGun(id){
     else if(sh==='x'){geo=flat(new THREE.CylinderGeometry(p[1]/2,p[1]/2,p[0],10));geo.rotateZ(Math.PI/2);}
     else if(sh==='s'){geo=flat(new THREE.SphereGeometry(0.5,8,6));sc=[p[0],p[1],p[2]];}
     else geo=new THREE.BoxGeometry(p[0],p[1],p[2]);
-    var m=new THREE.Mesh(geo,p[7]?MB(p[6]):M(p[6]));
+    var m=new THREE.Mesh(geo,partMat(p,skinFor(id)));
     m.position.set(p[3],p[4],p[5]);
     if(sc)m.scale.set(sc[0],sc[1],sc[2]);
     if(p[9])m.rotation.set(p[9][0],p[9][1],p[9][2]);
@@ -2327,13 +2462,14 @@ mapBtns.forEach(function(b){
 $('best').innerHTML=best?('Melhor rodada: <b>'+best+'</b>'):'';
 
 /* ===================== Configurações ===================== */
-var cfg={sensM:1,sensT:1,sensY:1,fov:75,vol:0.8,q:isTouch?1.25:2,inv:false,nick:'',btnS:1,btnO:0.85,layout:{L:{},P:{}}};
+var cfg={sensM:1,sensT:1,sensY:1,fov:75,vol:0.8,q:isTouch?1.25:2,inv:false,nick:'',btnS:1,btnO:0.85,layout:{L:{},P:{}},skins:{}};
 try{
   var svd=JSON.parse(localStorage.getItem('ultima-onda-cfg')||'null');
   if(svd){
     for(var ck in cfg){if(svd[ck]!==undefined)cfg[ck]=svd[ck];}
     if(svd.sens!==undefined&&svd.sensM===undefined){cfg.sensM=svd.sens;cfg.sensT=svd.sens;}
     if(!cfg.layout||!cfg.layout.L||!cfg.layout.P)cfg.layout={L:{},P:{}};
+    if(!cfg.skins||typeof cfg.skins!=='object')cfg.skins={};
   }
 }catch(e){}
 function saveCfg(){try{localStorage.setItem('ultima-onda-cfg',JSON.stringify(cfg));}catch(e){}}
@@ -3335,6 +3471,65 @@ function loop(ts){
     if(game.started&&!game.over&&!player.down&&player.weapons.length)renderer.render(gunScene,gunCam);
   }catch(e){showErr('desenho',e);}
 }
+
+/* ---- tela de criação de skins ---- */
+var skState={id:'all'};
+var SK_DEFAULT={p:'#3a3f46',s:'#5a3c22',a:'#f2b84b',pat:'liso'};
+function skWeaponIds(){return Object.keys(WEAPONS).filter(function(k){return WEAPONS[k].parts;}).sort(function(a,b){return WEAPONS[a].name.localeCompare(WEAPONS[b].name);});}
+function skEffective(){var K=cfg.skins;return K[skState.id]||(skState.id!=='all'?K.all:null)||null;}
+function skPreviewId(){
+  if(skState.id!=='all')return skState.id;
+  var w=player.weapons[player.cur];return w?w.id:'ceifa';
+}
+function skFillSelect(){
+  var sel=$('skW'),cur=skState.id;sel.textContent='';
+  function opt(v,t){var o=document.createElement('option');o.value=v;o.textContent=t;sel.appendChild(o);}
+  opt('all',(cfg.skins.all?'★ ':'')+'Todas as armas');
+  skWeaponIds().forEach(function(id){opt(id,(cfg.skins[id]?'★ ':'')+WEAPONS[id].name);});
+  sel.value=cur;
+}
+function skSyncUI(){
+  var sk=skEffective()||SK_DEFAULT;
+  $('skP').value=sk.p;$('skS').value=sk.s;$('skA').value=sk.a;$('skPat').value=sk.pat||'liso';
+  $('skNote').textContent=(skState.id==='all'?'Vale para todas as armas que não tiverem uma skin própria. ':'')+'Mostrando: '+WEAPONS[skPreviewId()].name+(skEffective()?'':' (sem skin)');
+  skDraw();
+}
+function skDraw(){skinDrawPreview($('skPrev'),skPreviewId(),skEffective());}
+function skRefresh(){
+  /* reconstrói os modelos afetados e reequipa a arma na mão */
+  if(skState.id==='all')gunViews={};else delete gunViews[skState.id];
+  if(game.started&&player.weapons.length)showGun();
+}
+function skApply(sk){
+  if(sk)cfg.skins[skState.id]=sk;else delete cfg.skins[skState.id];
+  saveCfg();skRefresh();skFillSelect();skSyncUI();
+}
+function skFromInputs(){return {p:$('skP').value,s:$('skS').value,a:$('skA').value,pat:$('skPat').value};}
+(function(){
+  SKIN_PATS.forEach(function(pt){var o=document.createElement('option');o.value=pt[0];o.textContent=pt[1];$('skPat').appendChild(o);});
+  SKIN_PRESETS.forEach(function(pr){
+    var b=document.createElement('button');b.type='button';b.textContent=pr.n;b.style.borderLeftColor=pr.p;
+    b.addEventListener('click',function(){skApply({p:pr.p,s:pr.s,a:pr.a,pat:pr.pat});});
+    $('skPresets').appendChild(b);
+  });
+  ['skP','skS','skA','skPat'].forEach(function(id){
+    $(id).addEventListener('input',function(){
+      cfg.skins[skState.id]=skFromInputs();
+      if(skState.id==='all')gunViews={};else delete gunViews[skState.id];
+      skDraw();
+    });
+    $(id).addEventListener('change',function(){skApply(skFromInputs());});
+  });
+  $('skW').addEventListener('change',function(){skState.id=$('skW').value;skSyncUI();});
+  $('skReset').addEventListener('click',function(){skApply(null);});
+  $('skAll').addEventListener('click',function(){
+    var sk=skEffective();if(!sk)return;
+    var keep=sk;cfg.skins={all:keep};skState.id='all';gunViews={};
+    saveCfg();if(game.started&&player.weapons.length)showGun();skFillSelect();skSyncUI();
+  });
+  $('skinBtn').addEventListener('click',function(){skFillSelect();skSyncUI();showScreen('skin',true);});
+  $('skBack').addEventListener('click',function(){saveCfg();showScreen('skin',false);});
+})();
 
 /* ===================== Início ===================== */
 function boot(){
