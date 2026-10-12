@@ -1,0 +1,12 @@
+{
+  "name": "Última Onda",
+  "short_name": "Última Onda",
+  "description": "Sobrevivência em ondas contra zumbis, com cooperativo online.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#060b0b",
+  "theme_color": "#060b0b",
+  "icons": [{"src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}]
+}
