@@ -369,7 +369,11 @@ input,select{-webkit-user-select:text;user-select:text}
   </div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>window.THREE||document.write('<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"><\/script>');</script>
+<script>window.THREE||document.write('<script src="https://unpkg.com/three@0.128.0/build/three.min.js"><\/script>');</script>
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>window.Peer||document.write('<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"><\/script>');</script>
+<script>window.Peer||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"><\/script>');</script>
 <script>
 (function(){
 'use strict';
@@ -2419,6 +2423,10 @@ function wrapAng(a){while(a>Math.PI)a-=Math.PI*2;while(a<-Math.PI)a+=Math.PI*2;r
 })();
 
 /* ---- transporte alternativo: PeerJS (WebRTC) para quando o jogo está num site comum ---- */
+var PEER_OPTS={debug:1,config:{iceServers:[
+  {urls:['stun:stun.l.google.com:19302','stun:stun1.l.google.com:19302','stun:stun.cloudflare.com:3478']},
+  {urls:['turn:openrelay.metered.ca:80','turn:openrelay.metered.ca:443','turn:openrelay.metered.ca:443?transport=tcp'],username:'openrelayproject',credential:'openrelayproject'}
+],iceCandidatePoolSize:4}};
 var peerNS={
   join:function(code,asHost){
     return new Promise(function(resolve,reject){
@@ -2426,7 +2434,7 @@ var peerNS={
       var PID='uo-'+code,peer=null,closed=false,done=false;
       var conns={},states={},local={},dirty=false,hostConn=null,myId=null,timer=null;
       function finish(ok,v){if(done)return;done=true;clearTimeout(tm);if(ok)resolve(v);else{try{if(peer)peer.destroy();}catch(e){}reject(v);}}
-      var tm=setTimeout(function(){finish(false,{code:'tempo_esgotado'});},12000);
+      var tm=setTimeout(function(){finish(false,{code:'tempo_esgotado'});},25000);
       function mergeInto(obj,patch){for(var k in patch){if(patch[k]===null)delete obj[k];else obj[k]=patch[k];}}
       function broadcast(){
         dirty=false;
@@ -2451,16 +2459,28 @@ var peerNS={
           for(var id in states)out.push({peer:id,isMe:false,sameTab:false,kind:'viewer',guest:false,presence:states[id]});
           return out;
         },
-        leave:function(){closed=true;clearInterval(timer);try{peer.destroy();}catch(e){}return Promise.resolve();},
+        leave:function(){closed=true;clearInterval(timer);clearTimeout(rcT);try{peer.destroy();}catch(e){}return Promise.resolve();},
         connected:function(){return !closed;}
       };
       try{
-        peer=asHost?new window.Peer(PID):new window.Peer();
+        peer=asHost?new window.Peer(PID,PEER_OPTS):new window.Peer(PEER_OPTS);
       }catch(e){finish(false,{code:'erro'});return;}
       peer.on('error',function(err){
-        var t=err&&err.type;
-        if(!done)finish(false,{code:t==='unavailable-id'?'codigo_em_uso':(t==='peer-unavailable'?'sala_nao_encontrada':(t||'erro'))});
+        var t=(err&&err.type)||'erro';
+        if(!done){finish(false,{code:t==='unavailable-id'?'codigo_em_uso':(t==='peer-unavailable'?'sala_nao_encontrada':t)});return;}
+        /* já conectado: falha de rede com o servidor de sinalização -> tenta reconectar */
+        if(t==='network'||t==='server-error'||t==='socket-error'||t==='socket-closed')reconnectSoon();
       });
+      /* o anfitrião precisa continuar registrado no servidor, senão ninguém mais consegue entrar */
+      var rcT=null;
+      function reconnectSoon(){
+        if(closed||rcT)return;
+        rcT=setTimeout(function(){
+          rcT=null;if(closed)return;
+          try{if(peer.destroyed)return;if(peer.disconnected)peer.reconnect();}catch(e){}
+        },1500);
+      }
+      peer.on('disconnected',function(){if(done)reconnectSoon();});
       peer.on('open',function(id){
         myId=id;
         if(asHost){
@@ -2485,6 +2505,7 @@ var peerNS={
           hostConn.on('data',function(m){if(m&&m.t==='s'&&m.s)states=m.s;});
           hostConn.on('close',function(){states={};});
           hostConn.on('error',function(){states={};});
+          hostConn.on('iceStateChanged',function(){});
         }
       });
     });
@@ -2802,7 +2823,7 @@ function mpEnter(code,asHost){
     if(net.lobbyTimer)clearInterval(net.lobbyTimer);
     net.lobbyTimer=setInterval(lobbyTick,500);lobbyTick();
   }).catch(function(e){
-    var cd=(e&&e.code)||'erro';mpStatus(cd==='sala_nao_encontrada'?'Sala não encontrada. Confira o código e se o anfitrião já criou a sala.':(cd==='codigo_em_uso'?'Esse código já está em uso. Crie outra sala.':'Não consegui conectar ('+cd+'). Tente de novo; se o celular estiver no 4G, a conexão entre jogadores pode falhar.'));
+    var cd=(e&&e.code)||'erro';mpStatus(cd==='sala_nao_encontrada'?'Sala não encontrada. Confira o código e se o anfitrião já criou a sala.':(cd==='codigo_em_uso'?'Esse código já está em uso. Crie outra sala.':(cd==='sem_peerjs'?'O multijogador não carregou (biblioteca bloqueada). Recarregue a página ou troque de rede/navegador.':(cd==='tempo_esgotado'?'Demorou demais para conectar. Confira o código, veja se o anfitrião está com a sala aberta e tente de novo (ou troque de Wi-Fi/4G).':(cd==='network'||cd==='server-error'||cd==='socket-error'||cd==='socket-closed'?'Não consegui falar com o servidor de conexão. Confira a internet e tente de novo em alguns segundos.':(cd==='browser-incompatible'||cd==='webrtc'?'Este navegador não suporta o multijogador (WebRTC). Use o Chrome ou o Safari atualizado.':'Não consegui conectar ('+cd+'). Tente de novo; se estiver no 4G ou em rede de escola, troque de rede.'))))));
   });
 }
 $('mpBtn').addEventListener('click',function(){
@@ -2812,7 +2833,7 @@ $('mpBtn').addEventListener('click',function(){
 });
 $('mpCreate').addEventListener('click',function(){mpEnter('zm'+Math.random().toString(36).slice(2,6),true);});
 $('mpJoin').addEventListener('click',function(){
-  var c=$('mpCode').value.trim().toLowerCase().replace(/[^a-z0-9_.-]/g,'');
+  var c=$('mpCode').value.trim().toLowerCase().replace(/[^a-z0-9_-]/g,'');
   if(c.length<3){mpStatus('Digite o código da sala.');return;}
   mpEnter(c,false);
 });
