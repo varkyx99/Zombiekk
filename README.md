@@ -1,6 +1,6 @@
 # Última Onda
 
-Jogo de sobrevivência em ondas contra zumbis, em primeira pessoa, com visual poligonal (PS2/N64), 46 armas com raridades, chicletes e cooperativo online para até 4 jogadores.
+Jogo de sobrevivência em ondas contra zumbis, em primeira pessoa, com visual poligonal (PS2/N64), 51 armas com raridades (5 exclusivas do mapa Colosso Perdido), 4 mapas, caixa misteriosa que muda de lugar, inspeção e mira, chicletes e cooperativo online para até 4 jogadores.
 
 ## Como colocar no ar (GitHub Pages)
 
@@ -13,15 +13,20 @@ Jogo de sobrevivência em ondas contra zumbis, em primeira pessoa, com visual po
 
 1. Todo mundo abre o link do site.
 2. Um jogador toca em **Cooperativo online**, digita um apelido, escolhe o mapa no menu antes e toca em **Criar sala**.
-3. Ele passa o código da sala (ex.: `zm4k2q`) para os outros, que tocam em **Cooperativo online**, digitam o código e tocam em **Entrar**.
+3. Ele passa o código da sala (6 caracteres, ex.: `bm4k2q`; a primeira letra indica o servidor) para os outros, que tocam em **Cooperativo online**, digitam o código e tocam em **Entrar**.
 4. Quando todos aparecerem na lista, o anfitrião toca em **Iniciar partida**.
 
 Observações:
 
 - O anfitrião roda os zumbis. Ele precisa deixar a aba aberta e em primeiro plano.
-- A conexão entre jogadores usa WebRTC pelo serviço público do PeerJS. Em redes muito restritas (alguns 4G ou Wi-Fi de escola) pode falhar; troque de rede e tente de novo.
+- A conexão passa por servidores públicos (MQTT sobre WebSocket: HiveMQ, EMQX ou Mosquitto), que funcionam em 4G e na maioria dos Wi-Fi. Se um estiver fora do ar, o jogo tenta o próximo ao criar a sala.
+- Todos precisam estar na mesma versão do site (recarregue a página depois de atualizar).
 - No celular, use **Adicionar à tela inicial** no navegador: o jogo abre em tela cheia e deitado.
 - O melhor resultado e as configurações ficam salvos no próprio aparelho.
+
+## Caixa misteriosa e mapas
+
+A caixa muda de lugar: depois de algumas giradas pode sair o urso de pelúcia, que devolve os 950 pontos e leva a caixa para outro ponto. O mapa **Colosso Perdido** é gigante (5 zonas) e tem 5 armas exclusivas: 4 bastões e o Punho do Colosso, nas paredes e na caixa só dele.
 
 ## Controles
 
@@ -32,7 +37,7 @@ Celular: joystick à esquerda, arraste à direita para olhar e use os botões (I
 
 - Todos precisam abrir o link `https://SEU-USUARIO.github.io/ultima-onda/` (https), e o anfitrião deve **criar a sala primeiro** e deixar a aba aberta.
 - Digite o código exatamente como aparece (maiúsculas/minúsculas não importam).
-- Se aparecer "Demorou demais" ou "servidor de conexão", troque de rede (Wi-Fi ↔ 4G) e tente de novo.
+- Se aparecer erro de servidor, troque de rede (Wi-Fi ↔ 4G) e tente de novo.
 - Importante: o `.nojekyll` começa com ponto e pode não aparecer na hora de enviar; o jogo funciona sem ele.
 
 ## Skins de arma
